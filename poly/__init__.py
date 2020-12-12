@@ -82,8 +82,24 @@ def load_apikey_from_path(config_path=None):
 
 
 def get_marketstatus(api_key, **query_params):
-    print ("Market status")
+    '''
+    Call Polygon API `marketstatus` and print the resulting data onscreen.
+    eg,
+    '''
     with RESTClient(api_key) as client:
         resp = client.reference_market_status(**query_params)
-        print(resp.market)
-    return None
+    nyse = resp.exchanges['nyse']
+    nasdaq = resp.exchanges['nasdaq']
+    otc = resp.exchanges['otc']
+    fx = resp.currencies['fx']
+    crypto = resp.currencies['crypto']
+    template = (f'As of {resp.serverTime}\n'
+                f'  Global Crypto:\t{crypto}\n'
+                f'  Global FX:\t\t{fx}\n'
+                f'  US Stocks:\t\t{resp.market}\n'
+                f'\tNYSE:\t\t{nyse}\n'
+                f'\tNASDAQ:\t\t{nasdaq}\n'
+                f'\tOTC:\t\t{otc}\n'
+    )
+    print(template)
+    return resp
