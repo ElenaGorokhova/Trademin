@@ -41,17 +41,17 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.command == 'marketstatus':
-        api_key = poly.load_apikey_from_path(args.config)
+        api_key = poly.load_api_key_from_path(args.config)
         poly.get_marketstatus(api_key)
 
     elif args.command == 'configure':
         if args.api_key:
             if args.api_key is not None:
                 # We have a new key to save to our config file
-                poly.save_apikey_to_path(args.api_key, args.overwrite, args.config)
+                poly.save_api_key_to_path(args.api_key, args.overwrite, args.config)
             else:
                 # Try to display the key found in the config
-                api_key = poly.load_apikey_from_path(args.config)
+                api_key = poly.load_api_key_from_path(args.config)
                 if api_key:
                     print (f"API KEY found in {args.config}:\n\t {api_key}")
                 else:
