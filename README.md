@@ -24,7 +24,7 @@ Technical goals
 * Use standard Python logging
 
 Python dependencies
-$> pip install polygon-api-client pytest
+$> pip install polygon-api-client pytest pandas
 
 Application description
 Trademin v 0.01 will be used to execute repetitive tasks through a simple command line interface (CLI). Aka. API wrapper.
