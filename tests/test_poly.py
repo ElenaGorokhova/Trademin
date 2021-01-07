@@ -10,6 +10,8 @@ from .. import poly
 EX_API_KEY = 'NaOW_Dp24BpexIR8A9qADvh3owYD98Ka'
 EX_API_KEY_RANDOM = 'THISISNOTAVALIDKEYBUTITDOESNOTMATTER'
 
+## todo ##
+## poly.json_dump 
 
 ## load_config ##
 
@@ -18,8 +20,7 @@ def test_load_config__no_params():
     Running without passing parameters should raise an TypeError exception
     HINT: This is the standard way to test for (and handle) exceptions (errors)
           using standard built-in python funtions alone. It's a little
-          bit more verbose, but also, more flexible and perhaps even, more
-          readable.
+          bit more verbose, but at the same time more flexible and readable.
     '''
     try:
         poly.load_config()
@@ -124,7 +125,6 @@ def test_save_api_key_to_path__new_valid_config_file_path():
         # check that the config exists and contains api_key
         api_key = poly.load_api_key_from_path(config_path)
         assert api_key == EX_API_KEY_RANDOM
-
 
 
 def test_save_api_key_to_path__null_value():

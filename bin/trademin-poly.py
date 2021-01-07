@@ -66,14 +66,50 @@ def run_dividends(args):
         print('---')
 
 
+def run_aggregates(args):
+    '''
+    Display ticker data as JSON
+    '''
+
+    # FIXME: make CONVERTING timetamps to isoformat OPTIONAL
+    api_key = poly.load_api_key_from_path(args.config)
+    aggregates = poly.get_ticker_aggregates(
+        api_key,
+        ticker=args.ticker,
+        from_=args.from_,
+        to=args.to,
+        multiplier=args.multiplier,
+        timespan=args.timespan,
+        unadjusted=args.unadjusted,
+        sort=args.sort,
+        limit=args.limit
+        )
+
+    if aggregates['resultsCount'] == 0:
+        print ("No results returned!")
+        return aggregates
+
+    if not args.keep_epochs:
+        modified_results = []
+        for result in aggregates['results']:
+            result['t'] = poly.timestamp_to_isoformat(result['t'])
+            modified_results.append(result)
+        aggregates['results'] = modified_results
+
+    if args.save_as:
+        poly.json_dump(args.save_as, aggregates['results'], True)
+    return aggregates
+
+
 # This runs the script when executed from the commandline
 if __name__ == '__main__':
     '''
     ```$> trademin-poly COMMAND```
     Available commmands
-    * configure : interacts with the script's configure file
+    * configure    : interacts with the script's configure file
     * marketstatus : displays summary of current market status (open/closed)
-    * dividends : displays summary of dividends info for requested tickers
+    * dividends    : displays summary of dividends info for requested tickers
+    * aggregates   : displays summary of ticker candle / bar data
     '''
     # Set-up the CLI parser
     parser = argparse.ArgumentParser()
@@ -93,6 +129,20 @@ if __name__ == '__main__':
     c_dividends = subparser.add_parser("dividends")
     c_dividends.add_argument('tickers', nargs='+', type=str, default=None)
 
+    # commmand: `aggregates`
+    c_aggregates = subparser.add_parser("aggregates")
+    c_aggregates.add_argument('ticker', type=str, default=None)
+    c_aggregates.add_argument('--from_', type=str, default='yesterday')
+    c_aggregates.add_argument('--to', type=str, default='yesterday')
+    c_aggregates.add_argument('--unadjusted', type=str, default='yesterday')  # FIXME BOOLEAN
+    c_aggregates.add_argument('--multiplier', type=int, default=1)
+    c_aggregates.add_argument('--timespan', type=str, default='minute')
+    c_aggregates.add_argument('--limit', type=int, default=5000)
+    c_aggregates.add_argument('--sort', type=str, default='asc')
+    c_aggregates.add_argument('--save-as', type=str)
+    c_aggregates.add_argument('--keep-epochs', default=False, action='store_true')
+
+
     args = parser.parse_args()
 
     if args.command == 'marketstatus':
@@ -101,5 +151,7 @@ if __name__ == '__main__':
         run_configure(args)
     elif args.command == 'dividends':
         run_dividends(args)
+    elif args.command == 'aggregates':
+        run_aggregates(args)
     else:
         print ("How may a help you? Try `trademin-poly --help`")

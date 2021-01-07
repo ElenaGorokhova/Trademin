@@ -4,10 +4,14 @@ Poly package is a library of helper functions for communicating with Polygon.io
 API services.
 '''
 
-from dateutil.parser import parse as dtparse
+# from IPython import embed; embed()
+# import pdb; pdb.set_trace()
+
+
 import datetime
-import os
 import json
+import os
+import pytz
 import re
 
 import pandas
@@ -17,7 +21,44 @@ from polygon import RESTClient
 # the default path to where Polygon.io API key is found, under key 'api_key'
 DEFAULT_CONFIG_PATH = os.path.expanduser("~/.config/trademin/polygon.json")
 
+TIMEZONES = {
+    'America/New York': pytz.timezone('America/New_York')
+}
+
 ## Generic functions ##
+def timestamp_to_isoformat(ts):
+    # FIXME: We're assuming hardcoded conversion to NEW YORK timezone from local
+    dt_local = datetime.datetime.fromtimestamp(ts/1000.0)
+    dt_new_york_timezone = dt_local.astimezone(TIMEZONES['America/New York'])
+    dt_string = dt_new_york_timezone.isoformat()
+    return dt_string
+
+def date_parse(date_string, as_date=True):
+    from dateutil.parser import parse as dtparse
+
+    class simple_utc(datetime.tzinfo):
+        def tzname(self,**kwargs):
+            return "UTC"
+        def utcoffset(self, dt):
+            return datetime.timedelta(0)
+
+    date_string = date_string.strip().lower()
+    if date_string == 'today':
+        date = datetime.datetime.utcnow()
+    elif date_string == 'yesterday':
+        date = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+    else:
+        date = dtparse(date_string)
+
+    date_tzinfo = date.replace(tzinfo=simple_utc())
+
+    if as_date:
+        date = date_tzinfo.date()
+    else:
+        date = date_tzinfo
+
+    return date
+
 def json_dump(path, data, overwrite=False):
     '''
     Dump any data to a (temporary) json file.
@@ -29,12 +70,16 @@ def json_dump(path, data, overwrite=False):
     returns True if everything worked as expected.
     Raises an exception if error has occurred.
     '''
-    if not data:
-        raise ValueError(f"Null data object")
-
     path_basename = os.path.basename(path)
     if not path_basename.split('.')[-1] == 'json':
         raise RuntimeError('path must point to a file with .json extension')
+
+    if not (path.startswith('./') or path.startswith('/')):
+        path = './' + path
+        print('WARN: saving file to current working directory')
+
+    if not data:
+        raise ValueError(f"Null data object")
 
     # Check to see if we the file already exists
     if os.path.exists(path) and overwrite is False:
@@ -50,7 +95,6 @@ def json_dump(path, data, overwrite=False):
         json.dump(data, _path)
 
     return True
-
 
 def save_api_key_to_path(api_key, config_path, overwrite=False):
     '''
@@ -91,7 +135,6 @@ def save_api_key_to_path(api_key, config_path, overwrite=False):
         json.dump(config, _config_path)
     return True
 
-
 ## Configuration Management ##
 
 def load_config(config_path):
@@ -113,7 +156,6 @@ def load_config(config_path):
         else:
             raise json.JSONDecodeError(f"Invalid JSON Detected. Check {config_path}.")
     return config
-
 
 def load_api_key_from_path(config_path):
     '''
@@ -227,12 +269,12 @@ def _get_next_dividend(results, guess=True):
         return None
 
     # grab the most recent dividend
-    most_recent = sorted(results, key=lambda x: dtparse(x['exDate']))[-1]
+    most_recent = sorted(results, key=lambda x: date_parse(x['exDate']))[-1]
 
     # Check if most recent known is in the past
     next_dividend = None
     now = datetime.date.today()
-    if dtparse(most_recent['exDate']).date() < now:
+    if date_parse(most_recent['exDate']).date() < now:
         # if in the past, we can only guess when the next dividend will occur
         if guess:
             # Lets try to guess based on previous exDate's
@@ -253,7 +295,7 @@ def _get_next_dividend(results, guess=True):
 
             guess_result = df[
                 df.exDate.str.contains('-'+closest_month+'-')].iloc[0].to_dict()
-            guess_exDate_dt = dtparse(guess_result['exDate'])
+            guess_exDate_dt = date_parse(guess_result['exDate'])
             next_dividend = {
                 'ticker': guess_result['ticker'],
                 'guess': 1,
@@ -268,14 +310,12 @@ def _get_next_dividend(results, guess=True):
 
     return next_dividend
 
-
 def _get_last_dividend(results):
     if not results:
         return None
     # grab the most recent dividend
-    last_dividend = sorted(results, key=lambda x: dtparse(x['exDate']))[-1]
+    last_dividend = sorted(results, key=lambda x: date_parse(x['exDate']))[-1]
     return last_dividend
-
 
 def get_dividends(api_key, tickers, **query_params):
     '''
@@ -285,6 +325,7 @@ def get_dividends(api_key, tickers, **query_params):
     with RESTClient(api_key) as client:
         dividends = {}
         for symbol in tickers:
+            symbol = symbol.upper()
             resp = client.reference_stock_dividends(symbol, **query_params)
             dividends[symbol] = {
                 'count': resp.count,
@@ -293,3 +334,76 @@ def get_dividends(api_key, tickers, **query_params):
                 'next': _get_next_dividend(resp.results)
                 }
     return dividends
+
+def get_ticker_aggregates(api_key, ticker, from_='yesterday', to='yesterday',
+                    multiplier=1, timespan='minute', unadjusted=True,
+                    sort='asc', limit=5000, **query_params):
+    '''
+    Polgygon.io Stock ticker Aggregates (Candles / Bars)
+    GET /v2/aggs/ticker/{stocksTicker}/range/{multiplier}/{timespan}/{from}/{to}
+    EG: https://api.polygon.io/v2/aggs/ticker/AMD/range/1/minute/2021-01-04/2021-01-04?unadjusted=true&sort=asc&limit=1000&apiKey=NaOW_Dp24BpexIR8A9qADvh3owYD98Ka
+
+    IMPORTANT: Date information is timestamped in local New York Timezone!
+
+    Get aggregate bars for a stock over a given date range in custom time window sizes.
+    For example, if timespan = ‘minute’ and multiplier = ‘5’ then 5-minute bars will be returned.
+
+    Parameters
+    ticker: (eg AMD) The ticker symbol of the stock/equity.
+
+    multiplier: (default = 1) The size of the timespan multiplier.
+
+    minute: (default = 'minute') The size of the time window.
+            Available: minute, hour, day, week, quarter, year
+
+    from: (eg 2021-01-04) The start of the aggregate time window.
+            Available: YYYY-MM-DD or 'today' or 'yesterday'
+
+    to: (eg 2021-01-04) The end of the aggregate time window.
+            Available: YYYY-MM-DD or 'today' or 'yesterday'
+
+    unadjusted: (default = True) Whether or not the results are adjusted for
+            splits. By default, results are adjusted.
+            Set this to true to get results that are NOT adjusted for splits.
+
+    sort: (default 'asc) Sort the results by timestamp.
+        Available:
+          'asc' will return results in ascending order (oldest at the top)
+          'desc' will return results in descending order (newest at the top).
+
+    limit: (default = 5000) Limits the number of base aggregates queried to
+        create the aggregate results.
+        Polygon API Max 50000 and API Default 5000.
+
+    JSON Response Attributes
+    ticker: The exchange symbol that this item is traded under.
+    status: The status of this request's response.
+    adjusted: Whether or not this response was adjusted for splits.
+    queryCount: The number of aggregates (minute or day) used to generate the response.
+    resultsCount: The total number of results for this request.
+    request_id: A request id assigned by the server.
+    results:
+        o: The open price for the symbol in the given time period.
+        h: The highest price for the symbol in the given time period.
+        l: The lowest price for the symbol in the given time period.
+        c: The close price for the symbol in the given time period.
+        v: The trading volume of the symbol in the given time period.
+        vw: The volume weighted average price.
+        t: The Unix Msec timestamp for the start of the aggregate window.
+        n: The number of items in the aggregate windowAggr.
+    '''
+    dt_from = date_parse(from_)
+    dt_to = date_parse(to)
+
+    with RESTClient(api_key) as client:
+        symbol = ticker.upper()
+        resp = client.stocks_equities_aggregates(
+            ticker=symbol,
+            multiplier=multiplier,
+            timespan=timespan,
+            from_=dt_from,
+            to=dt_to,
+            limit=limit,
+            **query_params)
+        data = resp.__dict__
+    return data
