@@ -19,7 +19,8 @@ import pandas
 from polygon import RESTClient
 
 # the default path to where Polygon.io API key is found, under key 'api_key'
-DEFAULT_CONFIG_PATH = os.path.expanduser("~/.config/trademin/polygon.json")
+DEFAULT_USER_PATH = os.path.expanduser("~/.config/trademin/")
+DEFAULT_CONFIG_PATH = os.path.join(DEFAULT_USER_PATH, "polygon.json")
 
 TIMEZONES = {
     'America/New York': pytz.timezone('America/New_York')
