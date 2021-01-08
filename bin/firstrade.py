@@ -75,6 +75,8 @@ Notes:
 
 # This code here allows us to `import poly` even if it is not properly installed
 # and instead we are simply running from within the repository locally
+import os
+import sys
 try:
     # Poly is already in the system path, import as usual
     import poly
